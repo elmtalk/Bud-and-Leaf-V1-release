@@ -590,6 +590,10 @@ label.btn,
 .project-dashboard-actions .btn.secondary{background:#fffdf8!important;color:var(--leaf-dark)!important;border:1px solid var(--leaf-dark)!important}
 .setup-flow-card{background:#fffdf8!important;border-radius:14px!important;padding:14px!important}
 .clean-details:not([open]) .details-body{display:none!important}
+#recoveryImportDetails:not([open]) > summary::after{content:'+'!important}
+#recoveryImportDetails[open] > summary::after{content:'−'!important}
+#setupImportRlbLabel{display:inline-flex!important;align-items:center!important;justify-content:center!important;text-align:center!important}
+#addFeatureBtn{font-size:16px!important;line-height:1!important;min-width:88px!important;padding:0 18px!important;white-space:nowrap!important}
 @media(max-width:700px){
   .brandline.brand-compact{grid-template-columns:112px 1fr!important;gap:14px!important;min-height:128px!important;padding:14px 16px!important;border-radius:16px!important}
   .brand-icon-compact{width:98px!important;height:98px!important;min-width:98px!important;padding:5px!important;border-radius:10px!important}
@@ -639,9 +643,9 @@ label.btn,
           <li>Tap <strong>New project</strong> or <strong>Open existing</strong>. Use <strong>Stored Projects</strong> under Project files if the local project list has been cleared.</li>
           <li>For a new project, enter the project name, survey type and location.</li>
           <li>Confirm the location, then create the project.</li>
-          <li>Open the field map and add trees, groups, hedges or woodland.</li>
+          <li>Open the field map and tap <strong>+ Plot</strong> to add trees, groups, hedges or woodland.</li>
           <li>Use <strong>Save / sync / backup</strong> before closing the app or leaving site.</li>
-          <li>Use <strong>Exports</strong> or <strong>Share project ZIP</strong> when finished.</li>
+          <li>When finished, run a final sync and use <strong>Share project ZIP</strong>. Keep the completed ZIP with your normal PC / office project backups.</li>
         </ol>
       </div>
     </details>
@@ -664,7 +668,7 @@ label.btn,
             <h3 class="clean-subtitle">New project setup</h3>
             <div class="clean-muted" style="margin-bottom:10px">Fill in the required details. Bud&Leaf will create the project folder, .bud file, photos, exports and backups.</div>
             <label class="label">Project name *</label>
-            <input id="setupProjectName" class="input" type="text" placeholder="e.g. Ham and Marsh Safety" />
+            <input id="setupProjectName" class="input" type="text" placeholder="e.g. Regency Square" />
             <div style="height:14px"></div>
             <label class="label">Survey type *</label>
             <select id="surveyModeSelect" class="input">
@@ -848,7 +852,7 @@ label.btn,
   <div class="floating bottom-right">
     <div id="gpsPill" class="gps-pill hidden" aria-hidden="true"></div>
     <button id="gpsBtn" class="map-btn" title="Centre on surveyor">◎</button>
-    <button id="addFeatureBtn" class="map-btn big" title="Add feature">＋</button>
+    <button id="addFeatureBtn" class="map-btn big" title="Plot feature" aria-label="Plot feature">＋ Plot</button>
   </div>
   <div id="editingBanner" class="editing-banner hidden">Editing geometry <button id="finishEditBtn">Done</button></div>
   <div id="rlbDrawingBanner" class="walk-banner hidden">
@@ -1451,7 +1455,7 @@ function getBudSettingsDb(){
 function putBudSettingsDb(settings){
   const obj=Object.assign({},settings||{}, {id:BUD_SETTINGS_ID, updated_at:nowIso()});
   if(usingFallbackDb()){
-    try{localStorage.setItem('budleaf_settings_rc2e', JSON.stringify({projectsRootName:obj.projectsRootName||null}));}catch(e){}
+    try{localStorage.setItem('budleaf_settings_rc2e', JSON.stringify({projectsRootName:obj.projectsRootName||null,basemapPreference:obj.basemapPreference||'aerial'}));}catch(e){}
     return Promise.resolve();
   }
   return writeDb(store=>store.put(obj));
@@ -1463,7 +1467,7 @@ async function loadBudSettings(){
   renderBudRootStatus();
 }
 async function saveBudSettings(){
-  state.budSettings=Object.assign({},state.budSettings||{}, {projectsRootHandle:state.projectsRootHandle||null, projectsRootName:state.projectsRootName||null});
+  state.budSettings=Object.assign({},state.budSettings||{}, {projectsRootHandle:state.projectsRootHandle||null, projectsRootName:state.projectsRootName||null, basemapPreference:state.basemap||state.budSettings?.basemapPreference||'aerial'});
   await putBudSettingsDb(state.budSettings);
   renderBudRootStatus();
 }
@@ -1479,12 +1483,12 @@ function renderBudRootStatus(){
 }
 async function chooseBudProjectsRoot(){
   if(!window.showDirectoryPicker){
-    alert('This browser does not support choosing a project root folder. Bud&Leaf can still save locally and export ZIP/project files, but automatic project folders need the folder picker.');
+    alert('Reliable project-folder storage is not available in this browser. For this Bud&Leaf version on Android, set Chrome as the default browser, reopen Bud&Leaf, then choose or create your Projects folder.');
     return null;
   }
   try{
     const root=await window.showDirectoryPicker({mode:'readwrite'});
-    if(!(await budVerifyPermission(root,true))){ alert('Bud&Leaf does not have permission to write to that folder.'); return null; }
+    if(!(await budVerifyPermission(root,true))){ alert('Bud&Leaf could not get write access to that folder. On Android, use Chrome as the default browser and choose or create a normal folder such as Documents/Bud&Leaf Projects.'); return null; }
     state.projectsRootHandle=root;
     state.projectsRootName=root.name || 'Bud&Leaf Projects';
     await saveBudSettings();
@@ -1832,7 +1836,7 @@ async function searchOtherProjectsFolder(){
   const list=$('recoverProjectList');
   if(details){ details.classList.remove('hidden'); details.open=true; }
   if(!window.showDirectoryPicker){
-    alert('This browser does not support choosing another folder.');
+    alert('Folder access is not available in this browser. On Android, set Chrome as the default browser and reopen Bud&Leaf.');
     return;
   }
   let folder;
@@ -2004,7 +2008,8 @@ async function resolveSetupLocationForProject(p){
   if(draft){
     p.project_meta.site_centre={lat:draft.lat,lon:draft.lon};
     p.project_meta.site_address=draft.label||loc||'Project location';
-    if(loc) p.project_meta.postcode=loc;
+    if((draft.source||'').toLowerCase()==='postcode' && loc) p.project_meta.postcode=loc;
+    else delete p.project_meta.postcode;
     p.project_meta.location_source=draft.source||'location';
     return true;
   }
@@ -2168,19 +2173,53 @@ async function setBudProjectLocation(lat,lng,label,address){
   renderSetupStatus(); showNotice(label||'Site centre set.');
 }
 async function setupFindLocation(){
-  const q=($('setupLocationInput')?.value||'').trim(); if(!q){alert('Enter a postcode or location first.');return;}
+  const q=($('setupLocationInput')?.value||'').trim();
+  if(!q){alert('Enter a postcode or location first.');return;}
   showNotice('Searching for location…');
-  try{const res=await fetch('https://api.postcodes.io/postcodes/'+encodeURIComponent(q.replace(/\s+/g,'')));
-    if(res.ok){const d=await res.json(); if(d&&d.result){
-      if($('setupEastingInput') && Number.isFinite(Number(d.result.eastings))) $('setupEastingInput').value=Math.round(Number(d.result.eastings));
-      if($('setupNorthingInput') && Number.isFinite(Number(d.result.northings))) $('setupNorthingInput').value=Math.round(Number(d.result.northings));
-      setSetupLocationDraft(d.result.latitude,d.result.longitude,q,'postcode');
-      if(currentProject() && $('newProjectSetupPanel') && $('newProjectSetupPanel').classList.contains('hidden')){ await setBudProjectLocation(d.result.latitude,d.result.longitude,'Postcode found: '+q,q); }
-      else { showNotice('Location found.'); }
+
+  const postcodeLike=/^[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}$/i.test(q);
+  if(postcodeLike){
+    try{
+      const res=await fetch('https://api.postcodes.io/postcodes/'+encodeURIComponent(q.replace(/\s+/g,'')));
+      if(res.ok){
+        const d=await res.json();
+        if(d&&d.result){
+          if($('setupEastingInput') && Number.isFinite(Number(d.result.eastings))) $('setupEastingInput').value=Math.round(Number(d.result.eastings));
+          if($('setupNorthingInput') && Number.isFinite(Number(d.result.northings))) $('setupNorthingInput').value=Math.round(Number(d.result.northings));
+          setSetupLocationDraft(d.result.latitude,d.result.longitude,q,'postcode');
+          if(currentProject() && $('newProjectSetupPanel') && $('newProjectSetupPanel').classList.contains('hidden')) await setBudProjectLocation(d.result.latitude,d.result.longitude,'Postcode found: '+q,q);
+          else showNotice('Location found.');
+          return;
+        }
+      }
+    }catch(e){ console.warn('Postcode lookup failed; trying general location search.',e); }
+  }
+
+  try{
+    const url='https://nominatim.openstreetmap.org/search?format=jsonv2&countrycodes=gb&limit=1&addressdetails=1&q='+encodeURIComponent(q);
+    const res=await fetch(url,{headers:{'Accept':'application/json'}});
+    if(!res.ok) throw new Error('Location search returned '+res.status);
+    const items=await res.json();
+    const hit=Array.isArray(items)&&items.length?items[0]:null;
+    const lat=hit?Number(hit.lat):NaN;
+    const lon=hit?Number(hit.lon):NaN;
+    if(hit && Number.isFinite(lat) && Number.isFinite(lon)){
+      try{
+        const out=proj4('EPSG:4326','EPSG:27700',[lon,lat]);
+        if($('setupEastingInput') && Number.isFinite(Number(out[0]))) $('setupEastingInput').value=Math.round(Number(out[0]));
+        if($('setupNorthingInput') && Number.isFinite(Number(out[1]))) $('setupNorthingInput').value=Math.round(Number(out[1]));
+      }catch(e){}
+      const label=String(hit.display_name||q);
+      setSetupLocationDraft(lat,lon,label,'location search');
+      if(currentProject() && $('newProjectSetupPanel') && $('newProjectSetupPanel').classList.contains('hidden')) await setBudProjectLocation(lat,lon,'Location found: '+q,label);
+      else showNotice('Location found.');
       return;
-    }}
-    alert('Location not found.');
-  }catch(e){alert('Location lookup failed.');}
+    }
+    alert('Location not found. Try adding the town or county, or use a postcode, GPS or map centre.');
+  }catch(e){
+    console.warn('General location lookup failed.',e);
+    alert('Location lookup failed. Check your connection, or use a postcode, GPS or map centre.');
+  }
 }
 async function setupGoBng(){
   const e=Number($('setupEastingInput')?.value), n=Number($('setupNorthingInput')?.value);
@@ -2226,8 +2265,8 @@ async function setupUseMapCentre(){
   if(currentProject() && $('newProjectSetupPanel') && $('newProjectSetupPanel').classList.contains('hidden')) await setBudProjectLocation(c.lat,c.lng,'Using current map centre.',$('setupLocationInput')?.value||'Map centre');
   else showNotice('Site centre set from map.');
 }
-async function openSetupMap(){if(!currentProject()){ alert('Use New project or Open existing project first.'); return; } showMap(); switchBaseMap('aerial'); setTimeout(()=>{if(state.map){state.map.invalidateSize(); rebuildMap(); fitMapToProject();}},120);}
-function switchBaseMap(mode){if(!state.map)return;try{if(mode==='street'){if(state.map.hasLayer(state.satLayer))state.map.removeLayer(state.satLayer);if(!state.map.hasLayer(state.stdLayer))state.stdLayer.addTo(state.map);}else{if(state.map.hasLayer(state.stdLayer))state.map.removeLayer(state.stdLayer);if(!state.map.hasLayer(state.satLayer))state.satLayer.addTo(state.map);}}catch(e){}}
+async function openSetupMap(){if(!currentProject()){ alert('Use New project or Open existing project first.'); return; } showMap(); setTimeout(()=>{if(state.map){state.map.invalidateSize(); rebuildMap(); fitMapToProject();}},120);}
+function switchBaseMap(mode,persist=true){if(!state.map)return;const next=mode==='street'?'street':'aerial';try{if(next==='street'){if(state.map.hasLayer(state.satLayer))state.map.removeLayer(state.satLayer);if(!state.map.hasLayer(state.stdLayer))state.stdLayer.addTo(state.map);}else{if(state.map.hasLayer(state.stdLayer))state.map.removeLayer(state.stdLayer);if(!state.map.hasLayer(state.satLayer))state.satLayer.addTo(state.map);}state.basemap=next;if(persist){state.budSettings=Object.assign({},state.budSettings||{},{basemapPreference:next});saveBudSettings().catch(()=>{});}}catch(e){}}
 async function startRlbDrawingFromSetup(){
   if(!currentProject()){ alert('Use New project or Open existing project first.'); return; }
   showMap();
@@ -2349,6 +2388,33 @@ async function saveCurrentProject(force=false){
 function showHome(){ $('homeScreen').classList.remove('hidden'); $('mapScreen').classList.add('hidden'); renderSetupStatus(); }
 function showMap(){ $('homeScreen').classList.add('hidden'); $('mapScreen').classList.remove('hidden'); if(!state.gpsTracking) startGpsTracking(); if(state.map) setTimeout(()=>{ state.map.invalidateSize(); rebuildMap(); fitMapToProject(); },80); }
 function closeSheets(){ $('modalBackdrop').classList.add('hidden'); $('createSheet').classList.add('hidden'); $('featureSheet').classList.add('hidden'); if($('layersSheet')) $('layersSheet').classList.add('hidden'); if($('featurePickerSheet')) $('featurePickerSheet').classList.add('hidden'); }
+function budReturnToHomeFromMap(){ closeSheets(); cancelRlbDrawing(false); stopGpsTracking(); showHome(); showGps('GPS paused.'); }
+let budBackNavigationReady=false;
+let budAllowBrowserExit=false;
+function initBudBackNavigation(){
+  if(budBackNavigationReady) return;
+  try{
+    history.replaceState(Object.assign({},history.state||{},{budLeafBackBase:true}),'');
+    history.pushState({budLeafBackGuard:true},'');
+    budBackNavigationReady=true;
+    window.addEventListener('popstate',()=>{
+      if(budAllowBrowserExit) return;
+      const sheetOpen=(($('createSheet')&&!$('createSheet').classList.contains('hidden'))||($('featureSheet')&&!$('featureSheet').classList.contains('hidden'))||($('layersSheet')&&!$('layersSheet').classList.contains('hidden'))||($('featurePickerSheet')&&!$('featurePickerSheet').classList.contains('hidden')));
+      if(sheetOpen){ closeSheets(); history.pushState({budLeafBackGuard:true},''); return; }
+      if($('mapScreen')&&!$('mapScreen').classList.contains('hidden')){
+        budReturnToHomeFromMap();
+        history.pushState({budLeafBackGuard:true},'');
+        return;
+      }
+      if(confirm('Do you want to quit Bud&Leaf?')){
+        budAllowBrowserExit=true;
+        history.back();
+      }else{
+        history.pushState({budLeafBackGuard:true},'');
+      }
+    });
+  }catch(e){ console.warn('Back navigation guard could not be initialised.',e); }
+}
 function updateCreateSheetForMode(){
   const safety=isSafetyMode();
   if($('categoryCreateField')) $('categoryCreateField').classList.toggle('hidden', safety);
@@ -3001,7 +3067,9 @@ function initMap(){
     updateWhenIdle:true,
     keepBuffer:4
   });
-  state.satLayer.addTo(state.map);
+  const preferredBasemap=(state.budSettings&&state.budSettings.basemapPreference)==='street'?'street':'aerial';
+  state.basemap=preferredBasemap;
+  (preferredBasemap==='street'?state.stdLayer:state.satLayer).addTo(state.map);
   state.drawLayer=L.featureGroup().addTo(state.map);
   state.map.on('click', (ev)=>{
     if(state.stemPlotter){ addStemPointAtLatLng(ev.latlng); return; }
@@ -4987,7 +5055,7 @@ async function syncBudToFolder(opts={}){
   const p=ensureProject(); if(!p) return;
   const dir=await ensureProjectFolderHandle(p,true);
   if(!dir){ alert('Reconnect Bud&Leaf Projects folder before syncing.'); return; }
-  if(!(await budVerifyPermission(dir,true))){ alert('Bud&Leaf does not have permission to write to this folder.'); return; }
+  if(!(await budVerifyPermission(dir,true))){ alert('Bud&Leaf could not get write access to this project folder. On Android, use Chrome as the default browser, then reconnect the Bud&Leaf Projects folder.'); return; }
   const payload=currentBudProjectPackage(); if(!payload) return;
   const slug=budProjectFileBase(p);
   const {exportsDir,photosDir}=await ensureBudProjectSubfolders(dir);
@@ -5976,7 +6044,7 @@ function wireUi(){
   $('deleteProjectBtn').onclick=async ()=>{ const p=ensureProject(); if(!p) return; if(!confirm(`Delete ${p.name}?`)) return; await deleteProjectDb(p.id); state.currentProjectId=null; await refreshProjects(); showNotice('Project deleted.'); };
   $('openProjectBtn').onclick=()=>{ if(!ensureProject()) return; showMap(); setTimeout(()=>{ rebuildMap(); fitMapToProject(); },80); startCompass(); if(!state.gpsTracking) startGpsTracking(); };
   $('surveyModeSelect').onchange=()=>{ updateBoundaryTerminology(null); };
-  $('backToProjectsBtn').onclick=()=>{ closeSheets(); cancelRlbDrawing(false); stopGpsTracking(); showHome(); showGps('GPS paused.'); };
+  $('backToProjectsBtn').onclick=budReturnToHomeFromMap;
   if($('rlbStartFinishBtn')) $('rlbStartFinishBtn').onclick=toggleRlbStartFinish;
   if($('rlbCancelBtn')) $('rlbCancelBtn').onclick=()=>cancelRlbDrawing(true);
   $('layersBtn').onclick=openLayersSheet;
@@ -6039,6 +6107,8 @@ async function boot(){
   updateBudAutoSaveUi();
   initMap();
   wireUi();
+  if($('recoveryImportDetails')) $('recoveryImportDetails').open=false;
+  initBudBackNavigation();
   renderSetupStatus();
   renderBudRootStatus();
   updateProjectDashboardVisibility();

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'bud-leaf-v1-release-1';
+const CACHE_NAME = 'bud-leaf-v1-release-2';
 const CORE_FILES = [
   './index.html',
   './manifest.webmanifest'
@@ -93,4 +93,3 @@ self.addEventListener('fetch', function (event) {
       })
   );
 });
-
