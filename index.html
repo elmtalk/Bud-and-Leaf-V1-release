@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-<title>Bud&Leaf Beta</title>
+<title>Bud&Leaf Tree Survey App</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
 <style>
@@ -2398,7 +2398,6 @@ function showMap(){
 function closeSheets(){ $('modalBackdrop').classList.add('hidden'); $('createSheet').classList.add('hidden'); $('featureSheet').classList.add('hidden'); if($('layersSheet')) $('layersSheet').classList.add('hidden'); if($('featurePickerSheet')) $('featurePickerSheet').classList.add('hidden'); }
 function budReturnToHomeFromMap(){ closeSheets(); cancelRlbDrawing(false); stopGpsTracking(); showHome(); showGps('GPS paused.'); }
 let budBackNavigationReady=false;
-let budAllowBrowserExit=false;
 function budMapBackAction(){
   closeSheets();
   if(budBackNavigationReady && history.state && history.state.budLeafView==='map'){
@@ -2406,48 +2405,35 @@ function budMapBackAction(){
   }else{
     budReturnToHomeFromMap();
     if(budBackNavigationReady){
-      try{ history.replaceState({budLeafView:'home'},''); }catch(e){}
+      try{ history.replaceState(Object.assign({},history.state||{},{budLeafView:'home'}),''); }catch(e){}
     }
   }
 }
 function initBudBackNavigation(){
   if(budBackNavigationReady) return;
   try{
-    // Keep a base entry behind the app's Home entry. Map gets its own entry when opened.
-    // This makes Android Back follow Map -> Home -> Quit/Cancel reliably in a TWA.
-    history.replaceState(Object.assign({},history.state||{},{budLeafExitBase:true}),'');
-    history.pushState({budLeafView:'home'},'');
+    // Home uses the launch history entry. Opening the map adds one map entry.
+    // Android Back therefore follows Map -> Home -> normal Android/TWA exit.
+    history.replaceState(Object.assign({},history.state||{},{budLeafView:'home'}),'');
     budBackNavigationReady=true;
     window.addEventListener('popstate',()=>{
-      if(budAllowBrowserExit) return;
       const mapVisible=!!($('mapScreen')&&!$('mapScreen').classList.contains('hidden'));
       const sheetOpen=(($('createSheet')&&!$('createSheet').classList.contains('hidden'))||($('featureSheet')&&!$('featureSheet').classList.contains('hidden'))||($('layersSheet')&&!$('layersSheet').classList.contains('hidden'))||($('featurePickerSheet')&&!$('featurePickerSheet').classList.contains('hidden')));
 
       if(sheetOpen){
         closeSheets();
-        try{ history.pushState({budLeafView:mapVisible?'map':'home'},''); }catch(e){}
+        if(mapVisible){
+          try{ history.pushState({budLeafView:'map'},''); }catch(e){}
+        }
         return;
       }
 
       if(mapVisible){
         budReturnToHomeFromMap();
-        if(!history.state || history.state.budLeafView!=='home'){
-          try{ history.pushState({budLeafView:'home'},''); }catch(e){}
-        }
-        return;
       }
-
-      if(confirm('Do you want to quit Bud&Leaf?')){
-        budAllowBrowserExit=true;
-        try{ window.close(); }catch(e){}
-        setTimeout(()=>{
-          try{ history.back(); }catch(e){}
-        },100);
-      }else{
-        try{ history.pushState({budLeafView:'home'},''); }catch(e){}
-      }
+      // On Home, do not trap Back: Android/TWA handles the normal exit.
     });
-  }catch(e){ console.warn('Back navigation guard could not be initialised.',e); }
+  }catch(e){ console.warn('Back navigation could not be initialised.',e); }
 }
 function updateCreateSheetForMode(){
   const safety=isSafetyMode();
