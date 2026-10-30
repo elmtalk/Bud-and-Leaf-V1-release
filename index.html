@@ -2386,31 +2386,62 @@ async function saveCurrentProject(force=false){
 }
 
 function showHome(){ $('homeScreen').classList.remove('hidden'); $('mapScreen').classList.add('hidden'); renderSetupStatus(); }
-function showMap(){ $('homeScreen').classList.add('hidden'); $('mapScreen').classList.remove('hidden'); if(!state.gpsTracking) startGpsTracking(); if(state.map) setTimeout(()=>{ state.map.invalidateSize(); rebuildMap(); fitMapToProject(); },80); }
+function showMap(){
+  $('homeScreen').classList.add('hidden');
+  $('mapScreen').classList.remove('hidden');
+  if(budBackNavigationReady && (!history.state || history.state.budLeafView!=='map')){
+    try{ history.pushState({budLeafView:'map'},''); }catch(e){}
+  }
+  if(!state.gpsTracking) startGpsTracking();
+  if(state.map) setTimeout(()=>{ state.map.invalidateSize(); rebuildMap(); fitMapToProject(); },80);
+}
 function closeSheets(){ $('modalBackdrop').classList.add('hidden'); $('createSheet').classList.add('hidden'); $('featureSheet').classList.add('hidden'); if($('layersSheet')) $('layersSheet').classList.add('hidden'); if($('featurePickerSheet')) $('featurePickerSheet').classList.add('hidden'); }
 function budReturnToHomeFromMap(){ closeSheets(); cancelRlbDrawing(false); stopGpsTracking(); showHome(); showGps('GPS paused.'); }
 let budBackNavigationReady=false;
 let budAllowBrowserExit=false;
+function budMapBackAction(){
+  closeSheets();
+  if(budBackNavigationReady && history.state && history.state.budLeafView==='map'){
+    history.back();
+  }else{
+    budReturnToHomeFromMap();
+    if(budBackNavigationReady){
+      try{ history.replaceState({budLeafView:'home'},''); }catch(e){}
+    }
+  }
+}
 function initBudBackNavigation(){
   if(budBackNavigationReady) return;
   try{
-    history.replaceState(Object.assign({},history.state||{},{budLeafBackBase:true}),'');
-    history.pushState({budLeafBackGuard:true},'');
+    // Keep a base entry behind the app's Home entry. Map gets its own entry when opened.
+    // This makes Android Back follow Map -> Home -> Quit/Cancel reliably in a TWA.
+    history.replaceState(Object.assign({},history.state||{},{budLeafExitBase:true}),'');
+    history.pushState({budLeafView:'home'},'');
     budBackNavigationReady=true;
     window.addEventListener('popstate',()=>{
       if(budAllowBrowserExit) return;
+      const mapVisible=!!($('mapScreen')&&!$('mapScreen').classList.contains('hidden'));
       const sheetOpen=(($('createSheet')&&!$('createSheet').classList.contains('hidden'))||($('featureSheet')&&!$('featureSheet').classList.contains('hidden'))||($('layersSheet')&&!$('layersSheet').classList.contains('hidden'))||($('featurePickerSheet')&&!$('featurePickerSheet').classList.contains('hidden')));
-      if(sheetOpen){ closeSheets(); history.pushState({budLeafBackGuard:true},''); return; }
-      if($('mapScreen')&&!$('mapScreen').classList.contains('hidden')){
-        budReturnToHomeFromMap();
-        history.pushState({budLeafBackGuard:true},'');
+
+      if(sheetOpen){
+        closeSheets();
+        try{ history.pushState({budLeafView:mapVisible?'map':'home'},''); }catch(e){}
         return;
       }
+
+      if(mapVisible){
+        budReturnToHomeFromMap();
+        if(!history.state || history.state.budLeafView!=='home'){
+          try{ history.pushState({budLeafView:'home'},''); }catch(e){}
+        }
+        return;
+      }
+
       if(confirm('Do you want to quit Bud&Leaf?')){
         budAllowBrowserExit=true;
         history.back();
       }else{
-        history.pushState({budLeafBackGuard:true},'');
+        try{ history.pushState({budLeafView:'home'},''); }catch(e){}
       }
     });
   }catch(e){ console.warn('Back navigation guard could not be initialised.',e); }
@@ -6044,7 +6075,7 @@ function wireUi(){
   $('deleteProjectBtn').onclick=async ()=>{ const p=ensureProject(); if(!p) return; if(!confirm(`Delete ${p.name}?`)) return; await deleteProjectDb(p.id); state.currentProjectId=null; await refreshProjects(); showNotice('Project deleted.'); };
   $('openProjectBtn').onclick=()=>{ if(!ensureProject()) return; showMap(); setTimeout(()=>{ rebuildMap(); fitMapToProject(); },80); startCompass(); if(!state.gpsTracking) startGpsTracking(); };
   $('surveyModeSelect').onchange=()=>{ updateBoundaryTerminology(null); };
-  $('backToProjectsBtn').onclick=budReturnToHomeFromMap;
+  $('backToProjectsBtn').onclick=budMapBackAction;
   if($('rlbStartFinishBtn')) $('rlbStartFinishBtn').onclick=toggleRlbStartFinish;
   if($('rlbCancelBtn')) $('rlbCancelBtn').onclick=()=>cancelRlbDrawing(true);
   $('layersBtn').onclick=openLayersSheet;
