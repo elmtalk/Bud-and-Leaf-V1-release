@@ -2439,7 +2439,10 @@ function initBudBackNavigation(){
 
       if(confirm('Do you want to quit Bud&Leaf?')){
         budAllowBrowserExit=true;
-        history.back();
+        try{ window.close(); }catch(e){}
+        setTimeout(()=>{
+          try{ history.back(); }catch(e){}
+        },100);
       }else{
         try{ history.pushState({budLeafView:'home'},''); }catch(e){}
       }
